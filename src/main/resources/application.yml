@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: ledgerline
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ledgerline
+    username: ledgerline
+    password: ledgerline
+    hikari:
+      # Kept small on purpose. Postgres throughput peaks at a few connections
+      # per core; more connections mostly add lock and context switch overhead.
+      maximum-pool-size: 10
+      connection-timeout: 5000
+
+ledger:
+  # PESSIMISTIC, OPTIMISTIC or CONDITIONAL. See DebitStrategy.
+  locking: PESSIMISTIC
+  optimistic:
+    max-attempts: 5
+  bulkhead:
+    permits: ${spring.datasource.hikari.maximum-pool-size}
+    max-wait: 2s
+  idempotency:
+    # An IN_PROGRESS key older than this is treated as abandoned (the instance
+    # that claimed it probably died) and can be taken over by a retry.
+    lease: 30s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
