@@ -103,6 +103,7 @@ Virtual threads are on. That means the server will accept thousands of concurren
 | Virtual threads plus a default pool | Thousands of requests wait on 10 connections. Timeouts while the database sits idle. | Semaphore bulkhead sized to the pool, fast `503` when saturated. |
 | Tests on H2 | H2's locking and isolation differ from Postgres. Concurrency tests pass and prove nothing. | Every test runs on Postgres 18 via Testcontainers. |
 | Ordering events by `created_at` | Clocks on different instances drift. Events sort in the wrong order. | Postings are ordered by a database sequence. Timestamps are for humans. |
+| Storing the replay body as `jsonb` | Looks like the same JSON, but `jsonb` reorders keys and drops whitespace. Clients that hash or sign the response see a different answer on retry. The first CI run caught this. | The body is stored as `text`, exactly as sent. |
 | Retry on every failure | Retrying a timeout after the work committed duplicates it. | Retries are only safe because of the idempotency key, and only optimistic conflicts are retried internally. |
 
 ## Next milestones

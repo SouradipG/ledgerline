@@ -49,7 +49,9 @@ create table idempotency_keys (
     request_hash   text        not null,
     status         text        not null check (status in ('IN_PROGRESS', 'COMPLETED')),
     response_code  int,
-    response_body  jsonb,
+    -- text, not jsonb: jsonb reorders keys and changes whitespace, so a replay
+    -- would no longer be byte for byte identical to the original response.
+    response_body  text,
     created_at     timestamptz not null default now(),
     locked_at      timestamptz not null default now()
 );

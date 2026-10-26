@@ -45,7 +45,7 @@ public class IdempotencyStore {
             }
 
             Optional<KeyRow> existing = jdbc.sql("""
-                            select request_hash, status, response_code, response_body::text as response_body
+                            select request_hash, status, response_code, response_body
                             from idempotency_keys where key = :key
                             """)
                     .param("key", key)
@@ -88,7 +88,7 @@ public class IdempotencyStore {
     public void complete(String key, StoredResponse response) {
         jdbc.sql("""
                         update idempotency_keys
-                        set status = 'COMPLETED', response_code = :code, response_body = cast(:body as jsonb)
+                        set status = 'COMPLETED', response_code = :code, response_body = :body
                         where key = :key
                         """)
                 .param("code", response.status())
