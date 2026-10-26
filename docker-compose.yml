@@ -11,3 +11,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ledgerline"]
       interval: 2s
       retries: 15
+
+  kafka:
+    image: apache/kafka:4.1.0
+    ports:
+      - "9092:9092"
