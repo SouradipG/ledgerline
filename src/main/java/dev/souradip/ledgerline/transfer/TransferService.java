@@ -2,10 +2,9 @@ package dev.souradip.ledgerline.transfer;
 
 import dev.souradip.ledgerline.LedgerProperties;
 import dev.souradip.ledgerline.api.ApiException;
-import dev.souradip.ledgerline.api.ErrorBody;
 import dev.souradip.ledgerline.concurrency.DbBulkhead;
-import dev.souradip.ledgerline.idempotency.Claim;
 import dev.souradip.ledgerline.idempotency.IdempotencyStore;
+import dev.souradip.ledgerline.idempotency.IdempotentRequests;
 import dev.souradip.ledgerline.idempotency.StoredResponse;
 import dev.souradip.ledgerline.locking.LockingMode;
 import dev.souradip.ledgerline.locking.OptimisticConflictException;
@@ -17,28 +16,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
-/**
- * Runs a transfer exactly once per idempotency key.
- *
- * <pre>
- *   claim key (own tx, commits)  ->  move money + store response (one tx)  ->  reply
- *                                        |
- *                                        +-- unexpected failure: release key, client may retry
- * </pre>
- */
+/** Runs a transfer exactly once per idempotency key. */
 @Service
 public class TransferService {
 
     private final Ledger ledger;
+    private final IdempotentRequests idempotent;
     private final IdempotencyStore idempotency;
     private final DbBulkhead bulkhead;
     private final TransactionTemplate tx;
     private final JsonMapper json;
     private final LedgerProperties properties;
 
-    TransferService(Ledger ledger, IdempotencyStore idempotency, DbBulkhead bulkhead,
+    TransferService(Ledger ledger, IdempotentRequests idempotent, IdempotencyStore idempotency, DbBulkhead bulkhead,
                     TransactionTemplate tx, JsonMapper json, LedgerProperties properties) {
         this.ledger = ledger;
+        this.idempotent = idempotent;
         this.idempotency = idempotency;
         this.bulkhead = bulkhead;
         this.tx = tx;
@@ -51,34 +44,8 @@ public class TransferService {
     }
 
     public StoredResponse transfer(String idempotencyKey, TransferRequest request, LockingMode mode) {
-        return bulkhead.call(() -> run(idempotencyKey, request, mode));
-    }
-
-    private StoredResponse run(String key, TransferRequest request, LockingMode mode) {
-        switch (idempotency.claim(key, request.fingerprint())) {
-            case Claim.Replay replay -> {
-                return replay.response();
-            }
-            case Claim.InFlight inFlight -> throw new ApiException(HttpStatus.CONFLICT, "REQUEST_IN_PROGRESS",
-                    "a request with this idempotency key is still being processed");
-            case Claim.Mismatch mismatch -> throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "IDEMPOTENCY_KEY_REUSED",
-                    "this idempotency key was already used with a different request");
-            case Claim.Acquired acquired -> {
-                // fall through to do the work
-            }
-        }
-
-        try {
-            return executeWithRetry(key, request, mode);
-        } catch (TransferRejectedException rejected) {
-            StoredResponse response = StoredResponse.fresh(rejected.status().value(),
-                    json.writeValueAsString(new ErrorBody(rejected.code(), rejected.getMessage())));
-            tx.executeWithoutResult(status -> idempotency.complete(key, response));
-            return response;
-        } catch (RuntimeException unexpected) {
-            idempotency.release(key);
-            throw unexpected;
-        }
+        return bulkhead.call(() -> idempotent.execute(idempotencyKey, request.fingerprint(),
+                () -> executeWithRetry(idempotencyKey, request, mode)));
     }
 
     private StoredResponse executeWithRetry(String key, TransferRequest request, LockingMode mode) {

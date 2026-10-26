@@ -39,6 +39,13 @@ public class AccountRepository {
                 .optional();
     }
 
+    public Optional<Account> findAccount(long id) {
+        return jdbc.sql("select id, kind, currency from accounts where id = :id")
+                .param("id", id)
+                .query(Account.class)
+                .optional();
+    }
+
     public List<Account> findAll(long first, long second) {
         return jdbc.sql("select id, kind, currency from accounts where id in (:first, :second)")
                 .param("first", first)
@@ -48,7 +55,12 @@ public class AccountRepository {
     }
 
     public long treasuryFor(String currency) {
-        return jdbc.sql("select id from accounts where kind = 'TREASURY' and currency = :currency")
+        return systemAccount("TREASURY", currency);
+    }
+
+    public long systemAccount(String kind, String currency) {
+        return jdbc.sql("select id from accounts where kind = :kind and currency = :currency")
+                .param("kind", kind)
                 .param("currency", currency)
                 .query(Long.class)
                 .single();

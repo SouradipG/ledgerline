@@ -1,10 +1,13 @@
 package dev.souradip.ledgerline.transfer;
 
 import dev.souradip.ledgerline.account.Account;
+import dev.souradip.ledgerline.api.BusinessRuleException;
 import dev.souradip.ledgerline.account.AccountRepository;
 import dev.souradip.ledgerline.locking.DebitStrategies;
 import dev.souradip.ledgerline.locking.InsufficientFundsException;
 import dev.souradip.ledgerline.locking.LockingMode;
+import dev.souradip.ledgerline.outbox.OutboxWriter;
+import dev.souradip.ledgerline.outbox.TransferPostedEvent;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -14,24 +17,26 @@ import org.springframework.stereotype.Component;
 
 /** Double entry bookkeeping. Runs inside a transaction owned by the caller. */
 @Component
-class Ledger {
+public class Ledger {
 
     private final JdbcClient jdbc;
     private final AccountRepository accounts;
     private final DebitStrategies strategies;
+    private final OutboxWriter outbox;
 
-    Ledger(JdbcClient jdbc, AccountRepository accounts, DebitStrategies strategies) {
+    Ledger(JdbcClient jdbc, AccountRepository accounts, DebitStrategies strategies, OutboxWriter outbox) {
         this.jdbc = jdbc;
         this.accounts = accounts;
         this.strategies = strategies;
+        this.outbox = outbox;
     }
 
-    TransferView post(String idempotencyKey, TransferRequest request, LockingMode mode) {
+    public TransferView post(String idempotencyKey, TransferRequest request, LockingMode mode) {
         validate(request);
         try {
             strategies.get(mode).move(request.fromAccountId(), request.toAccountId(), request.amountMinor());
         } catch (InsufficientFundsException e) {
-            throw new TransferRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, "INSUFFICIENT_FUNDS", e.getMessage());
+            throw new BusinessRuleException(HttpStatus.UNPROCESSABLE_CONTENT, "INSUFFICIENT_FUNDS", e.getMessage());
         }
 
         UUID id = UUID.randomUUID();
@@ -52,6 +57,11 @@ class Ledger {
         insertPosting(id, request.fromAccountId(), -request.amountMinor(), request.currency());
         insertPosting(id, request.toAccountId(), request.amountMinor(), request.currency());
 
+        UUID eventId = UUID.randomUUID();
+        outbox.append(eventId, TransferPostedEvent.TYPE, String.valueOf(request.fromAccountId()),
+                new TransferPostedEvent(eventId, id, request.fromAccountId(), request.toAccountId(),
+                        request.amountMinor(), request.currency(), createdAt));
+
         return new TransferView(id, request.fromAccountId(), request.toAccountId(), request.amountMinor(),
                 request.currency(), "POSTED", createdAt);
     }
@@ -68,15 +78,15 @@ class Ledger {
 
     private void validate(TransferRequest request) {
         if (request.fromAccountId().equals(request.toAccountId())) {
-            throw new TransferRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, "SAME_ACCOUNT", "cannot transfer to the same account");
+            throw new BusinessRuleException(HttpStatus.UNPROCESSABLE_CONTENT, "SAME_ACCOUNT", "cannot transfer to the same account");
         }
         List<Account> found = accounts.findAll(request.fromAccountId(), request.toAccountId());
         if (found.size() != 2) {
-            throw new TransferRejectedException(HttpStatus.NOT_FOUND, "ACCOUNT_NOT_FOUND", "one or both accounts do not exist");
+            throw new BusinessRuleException(HttpStatus.NOT_FOUND, "ACCOUNT_NOT_FOUND", "one or both accounts do not exist");
         }
         for (Account account : found) {
             if (!account.currency().equals(request.currency())) {
-                throw new TransferRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, "CURRENCY_MISMATCH",
+                throw new BusinessRuleException(HttpStatus.UNPROCESSABLE_CONTENT, "CURRENCY_MISMATCH",
                         "account " + account.id() + " holds " + account.currency() + ", not " + request.currency());
             }
         }

@@ -13,6 +13,17 @@ spring:
       # per core; more connections mostly add lock and context switch overhead.
       maximum-pool-size: 10
       connection-timeout: 5000
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      # acks=all plus idempotence: the broker dedupes producer retries, so a
+      # network blip between relay and broker does not create extra copies.
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
 
 ledger:
   # PESSIMISTIC, OPTIMISTIC or CONDITIONAL. See DebitStrategy.
@@ -22,6 +33,25 @@ ledger:
   bulkhead:
     permits: ${spring.datasource.hikari.maximum-pool-size}
     max-wait: 2s
+  outbox:
+    relay-enabled: true
+    topic: ledger.transfers
+    batch-size: 100
+    send-timeout: 5s
+  payouts:
+    worker-enabled: true
+    # How long a worker owns a payout it picked up. If it dies, another worker
+    # takes the payout once this runs out.
+    lease: 30s
+    max-attempts: 12
+    retry-base: 1s
+    retry-max: 5m
+  provider:
+    base-url: http://localhost:8089
+    connect-timeout: 1s
+    # Shorter than any timeout upstream of us, so we give up and record UNKNOWN
+    # instead of the caller giving up on us first.
+    read-timeout: 3s
   idempotency:
     # An IN_PROGRESS key older than this is treated as abandoned (the instance
     # that claimed it probably died) and can be taken over by a retry.
