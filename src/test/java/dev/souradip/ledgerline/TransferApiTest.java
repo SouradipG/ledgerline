@@ -13,7 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
-class TransferApiTest extends PostgresTestBase {
+class TransferApiTest extends IntegrationTestBase {
 
     @Autowired
     MockMvc mvc;

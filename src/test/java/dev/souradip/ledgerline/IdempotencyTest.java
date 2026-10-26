@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * A client times out and retries, or a load balancer replays a request. The same key must never
  * move money twice, even when the copies arrive at the same time on different threads.
  */
-class IdempotencyTest extends PostgresTestBase {
+class IdempotencyTest extends IntegrationTestBase {
 
     @Autowired
     TransferService transfers;

@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * hold one row and wait for the other, and Postgres would abort one with a deadlock error.
  * Locking in ascending id order removes the cycle.
  */
-class OpposingTransfersTest extends PostgresTestBase {
+class OpposingTransfersTest extends IntegrationTestBase {
 
     @Autowired
     TransferService transfers;

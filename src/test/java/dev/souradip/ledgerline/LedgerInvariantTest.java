@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Random transfers between 20 accounts from 32 threads at once, many of them overdrawing on
  * purpose. Whatever interleaving happens, the books must still balance at the end.
  */
-class LedgerInvariantTest extends PostgresTestBase {
+class LedgerInvariantTest extends IntegrationTestBase {
 
     private static final int ACCOUNTS = 20;
     private static final int THREADS = 32;

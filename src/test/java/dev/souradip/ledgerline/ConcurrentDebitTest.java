@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The classic double spend. An account holds 100 and 200 requests try to take 80 at the same
  * moment. A naive read, check, write lets several of them through. Exactly one may succeed.
  */
-class ConcurrentDebitTest extends PostgresTestBase {
+class ConcurrentDebitTest extends IntegrationTestBase {
 
     @Autowired
     TransferService transfers;

@@ -43,6 +43,10 @@ public class LedgerFixture {
                 .single();
     }
 
+    public long clearingBalance(String currency) {
+        return balanceOf(accounts.systemAccount("PAYOUT_CLEARING", currency));
+    }
+
     public long transferCount() {
         return jdbc.sql("select count(*) from transfers").query(Long.class).single();
     }
